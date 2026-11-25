@@ -65,23 +65,28 @@
     </header>
 
     <main class="lobby-grid">
-      <!-- Превью червячка -->
+      <!-- Превью -->
       <div class="glass-panel preview-panel">
         <div class="preview-header">
-          <h2>Твой червячок</h2>
-          <span id="previewBadge" class="preview-badge hidden">Примерка</span>
+          <h2>Твой питомец</h2>
+          <div id="previewControls" class="preview-controls hidden">
+            <span class="preview-badge">Примерка</span>
+            <button id="resetPreviewBtn" class="jelly-btn small-btn">Сбросить</button>
+          </div>
         </div>
         <div class="preview-stage">
-          <canvas id="previewCanvas" width="360" height="190"></canvas>
+          <canvas id="previewCanvas" width="380" height="200"></canvas>
         </div>
         <button id="playBtn" class="jelly-btn play-btn">ИГРАТЬ</button>
         <p class="controls-hint">ПК: мышка + ЛКМ / Пробел / Shift • Телефон: джойстик + кнопка</p>
       </div>
 
-      <!-- Кастомизация с примеркой -->
+      <!-- Кастомизация -->
       <div class="glass-panel custom-panel">
         <div class="custom-tabs">
-          <button class="jelly-btn ctab active" data-ctab="skins">Скины</button>
+          <button class="jelly-btn ctab active" data-ctab="bodies">Вид</button>
+          <button class="jelly-btn ctab" data-ctab="skins">Цвета</button>
+          <button class="jelly-btn ctab" data-ctab="hats">Шапки</button>
           <button class="jelly-btn ctab" data-ctab="eyes">Глазки</button>
           <button class="jelly-btn ctab" data-ctab="patterns">Узор</button>
           <button class="jelly-btn ctab" data-ctab="auras">Аура</button>
@@ -89,11 +94,10 @@
 
         <div id="customGrid" class="custom-grid"></div>
 
-        <!-- Нижняя панель покупки / применения -->
         <div class="custom-footer">
           <div class="selected-info">
-            <strong id="selectedItemName">Аква Гель</strong>
-            <span id="selectedItemStatus">В коллекции</span>
+            <strong id="selectedItemName">Червячок</strong>
+            <span id="selectedItemStatus">Надето</span>
           </div>
           <button id="customActionBtn" class="jelly-btn primary-btn">Надето ✓</button>
         </div>
@@ -106,7 +110,7 @@
     <canvas id="gameCanvas"></canvas>
 
     <div class="hud-top-left glass-chip">
-      <div>Длина: <strong id="hudScore">14</strong></div>
+      <div>Длина: <strong id="hudScore">15</strong></div>
       <div>Капли: <strong id="hudCoins">+0</strong></div>
     </div>
 
@@ -116,6 +120,11 @@
     </div>
 
     <button id="exitGameBtn" class="jelly-btn icon-btn hud-exit" title="В меню">✕</button>
+
+    <!-- Стеклянная мини-карта -->
+    <div class="minimap-wrap">
+      <canvas id="minimapCanvas" width="124" height="124"></canvas>
+    </div>
 
     <!-- Мобильное управление (скрыто на ПК) -->
     <div id="mobileControls" class="mobile-controls">
