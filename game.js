@@ -7,6 +7,14 @@
   const jellyCache = new Map();
   const foodCache = new Map();
 
+  function getSkinColors(custom) {
+    if (custom.skin === "custom" && Array.isArray(custom.customColors) && custom.customColors.length === 3) {
+      return custom.customColors;
+    }
+    const found = CFG.SKINS.find(s => s.id === custom.skin) || CFG.SKINS[0];
+    return found.colors;
+  }
+
   function getJellySegmentSprite(color, pattern, bodyType) {
     const key = `${color}_${pattern}_${bodyType}`;
     if (jellyCache.has(key)) return jellyCache.get(key);
@@ -19,7 +27,6 @@
     const cx = size / 2, cy = size / 2, r = 26;
 
     if (bodyType === "robot") {
-      // Глянцевый корпус Y2K-робота
       const baseGrad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
       baseGrad.addColorStop(0, "#ffffff");
       baseGrad.addColorStop(0.35, color);
@@ -31,18 +38,15 @@
       ctx.roundRect(cx - r, cy - r, r * 2, r * 2, 14);
       ctx.fill();
 
-      // Неоновый стык-рамка
       ctx.strokeStyle = "rgba(255,255,255,0.9)";
       ctx.lineWidth = 2.4;
       ctx.stroke();
 
-      // Стеклянный блик
       ctx.fillStyle = "rgba(255,255,255,0.65)";
       ctx.beginPath();
       ctx.roundRect(cx - r + 5, cy - r + 4, r * 2 - 10, r * 0.65, 8);
       ctx.fill();
     } else {
-      // 3D-желейная сфера
       const baseGrad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.34, r * 0.1, cx, cy, r);
       baseGrad.addColorStop(0, "#ffffff");
       baseGrad.addColorStop(0.28, color);
@@ -54,7 +58,6 @@
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fill();
 
-      // Нижний рефлекс
       const bounceGrad = ctx.createRadialGradient(cx, cy + r * 0.5, 2, cx, cy + r * 0.45, r * 0.65);
       bounceGrad.addColorStop(0, "rgba(255,255,255,0.72)");
       bounceGrad.addColorStop(1, "rgba(255,255,255,0)");
@@ -80,7 +83,6 @@
         ctx.fill();
       }
 
-      // Глянцевый полумесяц сверху
       const glossGrad = ctx.createLinearGradient(cx, cy - r, cx, cy);
       glossGrad.addColorStop(0, "rgba(255,255,255,0.92)");
       glossGrad.addColorStop(1, "rgba(255,255,255,0.06)");
@@ -144,7 +146,7 @@
       this.name = name;
       this.isBot = isBot;
       this.custom = custom;
-      this.skin = CFG.SKINS.find(s => s.id === custom.skin) || CFG.SKINS[0];
+      this.colors = getSkinColors(custom);
       this.aura = CFG.AURAS.find(a => a.id === custom.aura) || CFG.AURAS[0];
       this.angle = rand(0, Math.PI * 2);
       this.targetAngle = this.angle;
@@ -172,9 +174,9 @@
   class AeroGameEngine {
     constructor() {
       this.canvas = document.getElementById("gameCanvas");
-      this.ctx = this.canvas.getContext("2d", { alpha: false });
+      this.ctx = this.canvas ? this.canvas.getContext("2d", { alpha: false }) : null;
       this.minimapCanvas = document.getElementById("minimapCanvas");
-      this.minimapCtx = this.minimapCanvas.getContext("2d");
+      this.minimapCtx = this.minimapCanvas ? this.minimapCanvas.getContext("2d") : null;
 
       this.running = false;
       this.rafId = null;
@@ -187,6 +189,7 @@
       this.player = null;
       this.foods = [];
       this.particles = [];
+      this.botRespawnQueue = []; // Очередь отложенного возрождения ботов
       this.camera = { x: 0, y: 0, zoom: 1 };
       this.coinsEarned = 0;
       this.hudTimer = 0;
@@ -195,6 +198,7 @@
       this.joystick = { active: false, id: null };
       this.boostKeys = { mouse: false, space: false, shift: false, touch: false };
 
+      if (window.AeroMulti) window.AeroMulti.init();
       this.bindInputs();
       window.addEventListener("resize", () => this.resize());
     }
@@ -204,6 +208,7 @@
     }
 
     resize() {
+      if (!this.canvas || !this.ctx) return;
       this.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       this.width = window.innerWidth;
       this.height = window.innerHeight;
@@ -228,7 +233,7 @@
       window.addEventListener("keydown", (e) => {
         if (!this.running) return;
         if (e.code === "Space") { e.preventDefault(); this.boostKeys.space = true; }
-        if (e.code === "ShiftLeft" || e.code === "ShiftRight") { this.boostKeys.shift = true; }
+        if (e.code === "ShiftLeft" || e.code === "ShiftRight") this.boostKeys.shift = true;
       });
       window.addEventListener("keyup", (e) => {
         if (e.code === "Space") this.boostKeys.space = false;
@@ -238,8 +243,10 @@
       const zone = document.getElementById("joystickZone");
       const base = document.getElementById("joystickBase");
       const knob = document.getElementById("joystickKnob");
-      const maxDist = 36;
+      const boostBtn = document.getElementById("mobileBoostBtn");
+      if (!zone || !base || !knob || !boostBtn) return;
 
+      const maxDist = 36;
       const updateStick = (touch) => {
         const rect = base.getBoundingClientRect();
         const cx = rect.left + rect.width / 2;
@@ -277,7 +284,6 @@
       zone.addEventListener("touchend", endStick);
       zone.addEventListener("touchcancel", endStick);
 
-      const boostBtn = document.getElementById("mobileBoostBtn");
       boostBtn.addEventListener("touchstart", (e) => { e.preventDefault(); this.boostKeys.touch = true; }, { passive: false });
       boostBtn.addEventListener("touchend", () => { this.boostKeys.touch = false; });
       boostBtn.addEventListener("touchcancel", () => { this.boostKeys.touch = false; });
@@ -289,6 +295,7 @@
       this.worms = [];
       this.foods = [];
       this.particles = [];
+      this.botRespawnQueue = [];
       this.coinsEarned = 0;
       this.boostKeys = { mouse: false, space: false, shift: false, touch: false };
       this.mouse.active = false;
@@ -297,7 +304,11 @@
       this.player = new Worm(user.username, startPos.x, startPos.y, { ...user.customization }, false);
       this.worms.push(this.player);
 
-      for (let i = 0; i < CFG.BOT_COUNT; i++) this.spawnBot();
+      if (window.AeroMulti) window.AeroMulti.joinArena(this.player);
+
+      const remoteCount = window.AeroMulti ? window.AeroMulti.getRemoteCount() : 0;
+      const initialBots = Math.max(0, CFG.BOT_COUNT - remoteCount);
+      for (let i = 0; i < initialBots; i++) this.spawnBot();
       for (let i = 0; i < CFG.FOOD_COUNT; i++) this.spawnFood();
 
       this.camera.x = this.player.head.x;
@@ -310,6 +321,7 @@
     stop() {
       this.running = false;
       if (this.rafId) cancelAnimationFrame(this.rafId);
+      if (window.AeroMulti) window.AeroMulti.leaveArena();
     }
 
     randomPointInWorld(maxR) {
@@ -320,11 +332,12 @@
 
     spawnBot() {
       const pos = this.randomPointInWorld(CFG.WORLD_RADIUS * 0.8);
+      const normalSkins = CFG.SKINS.filter(s => !s.isCustom);
       const pick = (arr) => arr[Math.floor(Math.random() * arr.length)].id;
       const name = CFG.BOT_NAMES[Math.floor(Math.random() * CFG.BOT_NAMES.length)];
       this.worms.push(new Worm(name, pos.x, pos.y, {
         body: pick(CFG.BODIES),
-        skin: pick(CFG.SKINS),
+        skin: pick(normalSkins),
         hat: Math.random() < 0.5 ? pick(CFG.HATS) : "none",
         eyes: pick(CFG.EYES),
         pattern: pick(CFG.PATTERNS),
@@ -357,13 +370,16 @@
       const dt = Math.min(0.05, (now - this.lastTime) / 1000);
       this.lastTime = now;
 
-      this.update(dt);
+      this.update(dt, now);
       this.render(now * 0.001);
 
       this.rafId = requestAnimationFrame((t) => this.loop(t));
     }
 
-    update(dt) {
+    update(dt, now) {
+      // Отправка позиции в мультиплеер
+      if (window.AeroMulti) window.AeroMulti.sendState(this.player, dt);
+
       if (this.player && this.player.alive && this.mouse.active && !this.joystick.active) {
         const headScreenX = (this.player.head.x - this.camera.x) * this.camera.zoom + this.width / 2;
         const headScreenY = (this.player.head.y - this.camera.y) * this.camera.zoom + this.height / 2;
@@ -394,7 +410,7 @@
           if (w.boostDropTimer > 0.24) {
             w.boostDropTimer = 0;
             const tail = w.segments[w.segments.length - 1];
-            this.spawnFood(tail.x, tail.y, 1, w.skin.colors[0]);
+            this.spawnFood(tail.x, tail.y, 1, w.colors[0]);
           }
           if (w.length <= 12) w.boosting = false;
         }
@@ -418,9 +434,10 @@
         }
         while (w.segments.length > targetCount) w.segments.pop();
 
-        if (Math.hypot(head.x, head.y) > CFG.WORLD_RADIUS - w.radius) this.killWorm(w);
+        if (Math.hypot(head.x, head.y) > CFG.WORLD_RADIUS - w.radius) this.killWorm(w, now);
       }
 
+      // Поедание еды
       for (let i = this.foods.length - 1; i >= 0; i--) {
         const f = this.foods[i];
         for (const w of this.worms) {
@@ -430,7 +447,7 @@
             w.length += f.value * 0.45;
             if (w === this.player) {
               this.coinsEarned += f.value > 1 ? 2 : 0;
-              window.AeroAudio.pop();
+              if (window.AeroAudio) window.AeroAudio.pop();
             }
             this.foods.splice(i, 1);
             break;
@@ -440,6 +457,7 @@
 
       while (this.foods.length < CFG.FOOD_COUNT) this.spawnFood();
 
+      // Столкновения с локальными ботами
       for (const a of this.worms) {
         if (!a.alive) continue;
         for (const b of this.worms) {
@@ -449,7 +467,7 @@
           for (let i = 2; i < b.segments.length; i += 2) {
             const seg = b.segments[i];
             if (distSq(a.head.x, a.head.y, seg.x, seg.y) < hitRSq) {
-              this.killWorm(a);
+              this.killWorm(a, now);
               break;
             }
           }
@@ -457,8 +475,52 @@
         }
       }
 
+      // Столкновение игрока с удалёнными реальными игроками (из Supabase)
+      if (this.player && this.player.alive && window.AeroMulti) {
+        for (const rp of window.AeroMulti.remotePlayers.values()) {
+          if (!rp.segs) continue;
+          const rpRadius = Math.min(26, 12 + Math.sqrt(rp.length || 15) * 0.92);
+          const hitR = this.player.radius * 0.78 + rpRadius * 0.78;
+          const hitRSq = hitR * hitR;
+          for (let i = 1; i < rp.segs.length; i++) {
+            const [sx, sy] = rp.segs[i];
+            if (distSq(this.player.head.x, this.player.head.y, sx, sy) < hitRSq) {
+              this.killWorm(this.player, now);
+              break;
+            }
+          }
+          if (!this.player.alive) break;
+        }
+      }
+
+      // Удаляем мёртвых ботов
       this.worms = this.worms.filter(w => w.alive || w === this.player);
-      while (this.worms.length < CFG.BOT_COUNT + 1) this.spawnBot();
+
+      // ЛОГИКА ЗАМЕНЫ БОТОВ ИГРОКАМИ И ОТЛОЖЕННОГО РЕСПАВНА
+      const remoteCount = window.AeroMulti ? window.AeroMulti.getRemoteCount() : 0;
+      const targetBots = Math.max(0, CFG.BOT_COUNT - remoteCount);
+      let currentBots = this.worms.filter(w => w.isBot && w.alive);
+
+      // Если зашёл реальный игрок — убираем лишнего бота
+      while (currentBots.length > targetBots) {
+        const botToRemove = currentBots.pop();
+        const idx = this.worms.indexOf(botToRemove);
+        if (idx !== -1) this.worms.splice(idx, 1);
+      }
+
+      // Если ботов меньше нормы и очередь пуста — ставим в очередь с задержкой
+      const pendingBots = this.botRespawnQueue.length;
+      if (currentBots.length + pendingBots < targetBots) {
+        this.botRespawnQueue.push(now + rand(CFG.BOT_RESPAWN_MIN, CFG.BOT_RESPAWN_MAX));
+      }
+
+      // Возрождаем ботов, чьё время задержки пришло
+      while (this.botRespawnQueue.length > 0 && now >= this.botRespawnQueue[0]) {
+        this.botRespawnQueue.shift();
+        if (this.worms.filter(w => w.isBot && w.alive).length < targetBots) {
+          this.spawnBot();
+        }
+      }
 
       for (let i = this.particles.length - 1; i >= 0; i--) {
         const p = this.particles[i];
@@ -483,30 +545,25 @@
       }
     }
 
-    // Умный ИИ: сканирует опасность впереди и уворачивается
     updateBotAI(bot, dt) {
       bot.aiTimer -= dt;
       const head = bot.head;
 
-      // 1. Уход от края арены
       if (Math.hypot(head.x, head.y) > CFG.WORLD_RADIUS - 260) {
         bot.targetAngle = Math.atan2(-head.y, -head.x);
         bot.boosting = false;
         return;
       }
 
-      // 2. Проверка препятствий впереди (уклонение от игрока и других ботов)
       const lookX = head.x + Math.cos(bot.angle) * 115;
       const lookY = head.y + Math.sin(bot.angle) * 115;
       let dangerX = 0, dangerY = 0, dangerCount = 0;
 
       for (const other of this.worms) {
         if (other === bot || !other.alive) continue;
-        // Быстрая проверка по голове и каждому 3-му сегменту
         for (let i = 0; i < other.segments.length; i += 3) {
           const seg = other.segments[i];
-          const dSq = distSq(lookX, lookY, seg.x, seg.y);
-          if (dSq < 135 * 135) {
+          if (distSq(lookX, lookY, seg.x, seg.y) < 135 * 135) {
             dangerX += head.x - seg.x;
             dangerY += head.y - seg.y;
             dangerCount++;
@@ -520,7 +577,6 @@
         return;
       }
 
-      // 3. Поиск вкусной еды
       if (bot.aiTimer <= 0) {
         bot.aiTimer = rand(0.3, 0.85);
         let bestFood = null;
@@ -540,18 +596,21 @@
       }
     }
 
-    killWorm(w) {
+    killWorm(w, now) {
       if (!w.alive) return;
       w.alive = false;
-      this.spawnPopParticles(w.head.x, w.head.y, w.skin.colors[0], 12);
+      this.spawnPopParticles(w.head.x, w.head.y, w.colors[0], 12);
 
       for (let i = 0; i < w.segments.length; i += 3) {
         const s = w.segments[i];
-        this.spawnFood(s.x + rand(-10, 10), s.y + rand(-10, 10), 2.2, w.skin.colors[i % w.skin.colors.length]);
+        this.spawnFood(s.x + rand(-10, 10), s.y + rand(-10, 10), 2.2, w.colors[i % w.colors.length]);
       }
 
-      if (w === this.player) {
-        window.AeroAudio.burst();
+      if (w.isBot) {
+        // Бот вернётся не сразу, а через 5-9 секунд
+        this.botRespawnQueue.push((now || performance.now()) + rand(CFG.BOT_RESPAWN_MIN, CFG.BOT_RESPAWN_MAX));
+      } else if (w === this.player) {
+        if (window.AeroAudio) window.AeroAudio.burst();
         const totalCoins = Math.floor(w.score / 5) + this.coinsEarned;
         this.stop();
         if (this.onGameOver) this.onGameOver(w.score, totalCoins);
@@ -561,24 +620,36 @@
     updateHUD() {
       if (!this.player) return;
       const liveCoins = Math.floor(this.player.score / 5) + this.coinsEarned;
-      document.getElementById("hudScore").textContent = this.player.score;
-      document.getElementById("hudCoins").textContent = `+${liveCoins}`;
+      const scoreEl = document.getElementById("hudScore");
+      const coinsEl = document.getElementById("hudCoins");
+      const onlineEl = document.getElementById("hudOnline");
+      if (scoreEl) scoreEl.textContent = this.player.score;
+      if (coinsEl) coinsEl.textContent = `+${liveCoins}`;
 
-      const sorted = [...this.worms].filter(w => w.alive).sort((a, b) => b.score - a.score).slice(0, 5);
-      document.getElementById("leaderboardList").innerHTML = sorted.map(w =>
-        `<li class="${w === this.player ? "me" : ""}">${w.name} — ${w.score}</li>`
-      ).join("");
+      const remoteList = window.AeroMulti ? [...window.AeroMulti.remotePlayers.values()] : [];
+      if (onlineEl) onlineEl.textContent = 1 + remoteList.length;
+
+      const allForBoard = [
+        ...this.worms.filter(w => w.alive).map(w => ({ name: w.name, score: w.score, me: w === this.player })),
+        ...remoteList.map(rp => ({ name: rp.name + " 🌐", score: rp.length || 15, me: false }))
+      ].sort((a, b) => b.score - a.score).slice(0, 5);
+
+      const lb = document.getElementById("leaderboardList");
+      if (lb) {
+        lb.innerHTML = allForBoard.map(w =>
+          `<li class="${w.me ? "me" : ""}">${w.name} — ${w.score}</li>`
+        ).join("");
+      }
     }
 
     renderMinimap() {
+      if (!this.minimapCtx || !this.minimapCanvas) return;
       const ctx = this.minimapCtx;
       const size = this.minimapCanvas.width;
       const half = size / 2;
       const scale = (half - 8) / CFG.WORLD_RADIUS;
 
       ctx.clearRect(0, 0, size, size);
-
-      // Фон мини-карты
       ctx.fillStyle = "rgba(224, 247, 255, 0.55)";
       ctx.beginPath();
       ctx.arc(half, half, half - 2, 0, Math.PI * 2);
@@ -587,15 +658,27 @@
       // Боты
       for (const w of this.worms) {
         if (!w.alive || w === this.player) continue;
-        const mx = half + w.head.x * scale;
-        const my = half + w.head.y * scale;
-        ctx.fillStyle = w.skin.colors[0];
+        ctx.fillStyle = w.colors[0];
         ctx.beginPath();
-        ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
+        ctx.arc(half + w.head.x * scale, half + w.head.y * scale, 2.5, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Игрок (яркая пульсирующая точка)
+      // Реальные игроки (розовые точки с белой обводкой)
+      if (window.AeroMulti) {
+        for (const rp of window.AeroMulti.remotePlayers.values()) {
+          if (!rp.segs || !rp.segs[0]) continue;
+          ctx.fillStyle = "#ec4899";
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(half + rp.segs[0][0] * scale, half + rp.segs[0][1] * scale, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+
+      // Вы
       if (this.player && this.player.alive) {
         const px = half + this.player.head.x * scale;
         const py = half + this.player.head.y * scale;
@@ -615,6 +698,7 @@
     }
 
     render(time) {
+      if (!this.ctx) return;
       const ctx = this.ctx;
       const w = this.width;
       const h = this.height;
@@ -654,6 +738,17 @@
         ctx.drawImage(sprite, f.x - drawSize / 2, f.y + bob - drawSize / 2, drawSize, drawSize);
       }
 
+      // Рисуем удалённых реальных игроков
+      if (window.AeroMulti) {
+        for (const rp of window.AeroMulti.remotePlayers.values()) {
+          if (!rp.segs || rp.segs.length === 0) continue;
+          const segObjs = rp.segs.map(([x, y]) => ({ x, y }));
+          const rpRadius = Math.min(26, 12 + Math.sqrt(rp.length || 15) * 0.92);
+          this.drawCreature(ctx, segObjs, rp.angle || 0, rpRadius, rp.custom || {}, rp.boosting, time, viewW, viewH, rp.name);
+        }
+      }
+
+      // Рисуем локальных червячков и ботов
       for (const worm of this.worms) {
         if (worm.alive) this.drawCreature(ctx, worm.segments, worm.angle, worm.radius, worm.custom, worm.boosting, time, viewW, viewH, worm.name);
       }
@@ -684,13 +779,11 @@
       ctx.stroke();
     }
 
-    // Единая отрисовка существа (и в игре, и в превью)
     drawCreature(ctx, segs, headAngle, r, custom, boosting, time, viewW, viewH, labelName) {
-      const skin = CFG.SKINS.find(s => s.id === custom.skin) || CFG.SKINS[0];
+      const colors = getSkinColors(custom);
       const aura = CFG.AURAS.find(a => a.id === custom.aura) || CFG.AURAS[0];
       const bodyType = custom.body || "worm";
       const pattern = custom.pattern || "gloss";
-      const colors = skin.colors;
 
       for (let i = segs.length - 1; i >= 0; i--) {
         const s = segs[i];
@@ -703,7 +796,6 @@
           ? Math.floor(i / 2) % colors.length
           : Math.floor(i / 4) % colors.length;
 
-        // Красивая многослойная аура с искрами
         if (boosting || aura.color) {
           const auraColor = aura.color === "rainbow"
             ? `hsl(${(time * 90 + i * 18) % 360}, 90%, 65%)`
@@ -725,7 +817,6 @@
             ctx.arc(s.x, s.y, segR * (pulse * 0.92), 0, Math.PI * 2);
             ctx.stroke();
 
-            // Парящие искорки вокруг ауры
             const spA = time * 2.5 + i;
             ctx.fillStyle = "#ffffff";
             ctx.beginPath();
@@ -735,7 +826,6 @@
           ctx.restore();
         }
 
-        // Лапки для многоножки и гусенички
         if ((bodyType === "centipede" || (bodyType === "caterpillar" && i % 2 === 1)) && i > 0 && i < segs.length - 1) {
           const prev = segs[i - 1];
           const segAngle = Math.atan2(prev.y - s.y, prev.x - s.x);
@@ -754,21 +844,17 @@
           }
         }
 
-        // 3D-желейный сегмент
         const sprite = getJellySegmentSprite(colors[colorIdx], pattern, bodyType);
         const drawSize = segR * 2.38;
         ctx.drawImage(sprite, s.x - drawSize / 2, s.y - drawSize / 2, drawSize, drawSize);
       }
 
-      // Усики для гусенички и антеннка для робота
       const head = segs[0];
       if (bodyType === "caterpillar") this.drawAntennae(ctx, head, headAngle, r, colors[0]);
       if (bodyType === "robot") this.drawRobotAntenna(ctx, head, headAngle, r);
 
-      // Милая мордочка + глазки
       this.drawEyes(ctx, head, headAngle, r, custom.eyes || "kawaii");
 
-      // Аксессуар на голову
       if (custom.hat && custom.hat !== "none") {
         this.drawHat(ctx, head, headAngle, r, custom.hat, time);
       }
@@ -820,70 +906,90 @@
       ctx.restore();
     }
 
+    // Аксессуары повернуты по направлению головы (сидят слева/справа/на затылке)
     drawHat(ctx, head, angle, r, hat, time) {
       ctx.save();
-      ctx.translate(head.x, head.y - r * 0.95);
-      const bob = Math.sin(time * 4) * 2;
-      ctx.translate(0, bob);
+      ctx.translate(head.x, head.y);
+      ctx.rotate(angle);
+      const bob = Math.sin(time * 4) * 1.5;
 
-      if (hat === "crown") {
-        ctx.fillStyle = "#facc15";
+      if (hat === "cat_ears") {
+        // Кошачьи ушки строго слева и справа на голове
+        ctx.fillStyle = "#f9a8d4";
         ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        ctx.moveTo(-11, 4); ctx.lineTo(-13, -9); ctx.lineTo(-5, -2);
-        ctx.lineTo(0, -12); ctx.lineTo(5, -2); ctx.lineTo(13, -9); ctx.lineTo(11, 4);
-        ctx.closePath();
-        ctx.fill(); ctx.stroke();
+        ctx.lineWidth = 1.8;
+        for (const side of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(r * 0.05, side * r * 0.65);
+          ctx.lineTo(-r * 0.25, side * (r * 1.38 + bob));
+          ctx.lineTo(-r * 0.58, side * r * 0.62);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
       } else if (hat === "bow") {
+        // Милый бантик сбоку (слева) на голове
+        ctx.save();
+        ctx.translate(-r * 0.3, -r * 0.72);
+        ctx.rotate(-0.4);
         ctx.fillStyle = "#f472b6";
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.ellipse(-8, -2, 8, 5, -0.3, 0, Math.PI * 2);
-        ctx.ellipse(8, -2, 8, 5, 0.3, 0, Math.PI * 2);
+        ctx.ellipse(-6, 0, 7, 4.5, 0.2, 0, Math.PI * 2);
+        ctx.ellipse(6, 0, 7, 4.5, -0.2, 0, Math.PI * 2);
         ctx.fill(); ctx.stroke();
         ctx.beginPath();
-        ctx.arc(0, -2, 4, 0, Math.PI * 2);
+        ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
         ctx.fill(); ctx.stroke();
+        ctx.restore();
+      } else if (hat === "crown") {
+        // Коронка на затылке по направлению движения
+        ctx.save();
+        ctx.translate(-r * 0.48, 0);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillStyle = "#facc15";
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-10, 4); ctx.lineTo(-12, -8); ctx.lineTo(-4, -2);
+        ctx.lineTo(0, -11); ctx.lineTo(4, -2); ctx.lineTo(12, -8); ctx.lineTo(10, 4);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.restore();
       } else if (hat === "leaf") {
+        // Росток сбоку-сзади
         ctx.strokeStyle = "#16a34a";
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 2.4;
         ctx.beginPath();
-        ctx.moveTo(0, 4); ctx.quadraticCurveTo(0, -6, 6, -10);
+        ctx.moveTo(-r * 0.35, -r * 0.3);
+        ctx.quadraticCurveTo(-r * 0.9, -r * 0.6, -r * 1.15, -r * 0.95 + bob);
         ctx.stroke();
         ctx.fillStyle = "#4ade80";
         ctx.beginPath();
-        ctx.ellipse(9, -11, 7, 4, -0.4, 0, Math.PI * 2);
+        ctx.ellipse(-r * 1.15, -r * 0.95 + bob, 7, 4, -0.5, 0, Math.PI * 2);
         ctx.fill();
       } else if (hat === "bubble") {
-        ctx.fillStyle = "rgba(186, 230, 253, 0.55)";
+        // Пузырик парит сбоку от головы
+        ctx.fillStyle = "rgba(186, 230, 253, 0.6)";
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 1.8;
         ctx.beginPath();
-        ctx.arc(0, -7, 10, 0, Math.PI * 2);
+        ctx.arc(-r * 0.35, -r * 0.95 + bob, 9, 0, Math.PI * 2);
         ctx.fill(); ctx.stroke();
         ctx.fillStyle = "#ffffff";
         ctx.beginPath();
-        ctx.arc(-3, -10, 2.8, 0, Math.PI * 2);
+        ctx.arc(-r * 0.25, -r * 1.05 + bob, 2.6, 0, Math.PI * 2);
         ctx.fill();
-      } else if (hat === "cat_ears") {
-        ctx.fillStyle = "#f9a8d4";
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 1.8;
-        for (const s of [-1, 1]) {
-          ctx.beginPath();
-          ctx.moveTo(s * 4, 4); ctx.lineTo(s * 14, -10); ctx.lineTo(s * 15, 5);
-          ctx.closePath();
-          ctx.fill(); ctx.stroke();
-        }
       } else if (hat === "halo") {
+        // Нимб за головой
         ctx.strokeStyle = "#fef08a";
-        ctx.lineWidth = 3.5;
+        ctx.lineWidth = 3.2;
         ctx.beginPath();
-        ctx.ellipse(0, -10, 14, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(-r * 0.65, 0, 6, 14, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
+
       ctx.restore();
     }
 
@@ -895,7 +1001,6 @@
       const ex = r * 0.36;
       const ey = r * 0.44;
 
-      // Милая крошечная улыбочка
       if (eyeStyle !== "cool") {
         ctx.strokeStyle = "rgba(5, 51, 74, 0.65)";
         ctx.lineWidth = 1.8;
@@ -922,7 +1027,6 @@
       } else {
         for (const side of [-1, 1]) {
           const y = side * ey;
-          // Нежный румянец
           ctx.fillStyle = "rgba(244, 114, 182, 0.42)";
           ctx.beginPath();
           ctx.ellipse(ex - r * 0.14, y + side * r * 0.18, r * 0.17, r * 0.11, 0, 0, Math.PI * 2);
