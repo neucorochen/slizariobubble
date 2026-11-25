@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>AeroWorm — Frutiger Aero</title>
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <div class="aero-bg" id="aeroBg">
@@ -65,7 +65,6 @@
     </header>
 
     <main class="lobby-grid">
-      <!-- Превью -->
       <div class="glass-panel preview-panel">
         <div class="preview-header">
           <h2>Твой питомец</h2>
@@ -81,7 +80,6 @@
         <p class="controls-hint">ПК: мышка + ЛКМ / Пробел / Shift • Телефон: джойстик + кнопка</p>
       </div>
 
-      <!-- Кастомизация -->
       <div class="glass-panel custom-panel">
         <div class="custom-tabs">
           <button class="jelly-btn ctab active" data-ctab="bodies">Вид</button>
@@ -94,7 +92,6 @@
 
         <div id="customGrid" class="custom-grid"></div>
 
-        <!-- Палитра своей расцветки -->
         <div id="customColorBar" class="custom-color-bar hidden">
           <span>Твои 3 цвета:</span>
           <div class="color-pickers">
@@ -122,7 +119,7 @@
     <div class="hud-top-left glass-chip">
       <div>Длина: <strong id="hudScore">15</strong></div>
       <div>Капли: <strong id="hudCoins">+0</strong></div>
-      <div>Игроков: <strong id="hudOnline">1</strong></div>
+      <div>Игроков: <strong id="hudOnline">1 ⚪</strong></div>
     </div>
 
     <div class="hud-leaderboard glass-chip">
@@ -132,12 +129,10 @@
 
     <button id="exitGameBtn" class="jelly-btn icon-btn hud-exit" title="В меню">✕</button>
 
-    <!-- Стеклянная мини-карта -->
     <div class="minimap-wrap">
       <canvas id="minimapCanvas" width="124" height="124"></canvas>
     </div>
 
-    <!-- Мобильное управление (скрыто на ПК) -->
     <div id="mobileControls" class="mobile-controls">
       <div id="joystickZone" class="joystick-zone">
         <div id="joystickBase" class="joystick-base">
@@ -147,7 +142,6 @@
       <button id="mobileBoostBtn" class="jelly-btn boost-btn">⚡</button>
     </div>
 
-    <!-- Окно окончания игры -->
     <div id="gameOverModal" class="modal-overlay hidden">
       <div class="glass-panel gameover-card">
         <h2>Пузырёк лопнул!</h2>
@@ -170,11 +164,11 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=4"></script>
-  <script src="auth.js?v=4"></script>
-  <script src="audio.js?v=4"></script>
-  <script src="multiplayer.js?v=4"></script>
-  <script src="game.js?v=4"></script>
-  <script src="ui.js?v=4"></script>
+  <script src="config.js?v=6"></script>
+  <script src="auth.js?v=6"></script>
+  <script src="audio.js?v=6"></script>
+  <script src="multiplayer.js?v=6"></script>
+  <script src="game.js?v=6"></script>
+  <script src="ui.js?v=6"></script>
 </body>
 </html>
