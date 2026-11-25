@@ -6,13 +6,15 @@
   const aeroBg = document.getElementById("aeroBg");
 
   let authMode = "login";
-  let currentCustomTab = "skins";
-  let previewCustom = null; // Временная примерка
-  let selectedItem = null;  // Выбранная карточка для нижней кнопки
+  let currentCustomTab = "bodies";
+  let previewCustom = null;
+  let selectedItem = null;
   let previewRaf = null;
 
   const TAB_MAP = {
+    bodies:   { list: CFG.BODIES,   field: "body" },
     skins:    { list: CFG.SKINS,    field: "skin" },
+    hats:     { list: CFG.HATS,     field: "hat" },
     eyes:     { list: CFG.EYES,     field: "eyes" },
     patterns: { list: CFG.PATTERNS, field: "pattern" },
     auras:    { list: CFG.AURAS,    field: "aura" }
@@ -27,7 +29,6 @@
     else stopPreviewLoop();
   }
 
-  // Авторизация
   document.querySelectorAll("[data-auth-tab]").forEach(btn => {
     btn.addEventListener("click", () => {
       window.AeroAudio.click();
@@ -90,12 +91,10 @@
   }
 
   function selectCurrentTabDefault() {
-    const user = window.AeroAuth.getUser();
     const { list, field } = TAB_MAP[currentCustomTab];
     selectedItem = list.find(i => i.id === previewCustom[field]) || list[0];
   }
 
-  // Переключение вкладок кастомизации
   document.querySelectorAll("[data-ctab]").forEach(btn => {
     btn.addEventListener("click", () => {
       window.AeroAudio.click();
@@ -104,6 +103,15 @@
       selectCurrentTabDefault();
       renderCustomGrid();
     });
+  });
+
+  // Сброс примерки к реально надетым вещам
+  document.getElementById("resetPreviewBtn").addEventListener("click", () => {
+    const user = window.AeroAuth.getUser();
+    window.AeroAudio.click();
+    previewCustom = { ...user.customization };
+    selectCurrentTabDefault();
+    renderCustomGrid();
   });
 
   function renderCustomGrid() {
@@ -116,14 +124,14 @@
     list.forEach(item => {
       const isOwned = unlocked.includes(item.id);
       const isEquipped = user.customization[field] === item.id;
-      const isPreviewing = selectedItem && selectedItem.id === item.id;
+      const isPreviewing = previewCustom[field] === item.id;
 
       const card = document.createElement("div");
       card.className = `item-card ${isEquipped ? "equipped" : ""} ${isPreviewing && !isEquipped ? "previewing" : ""}`;
 
       const bgStyle = item.colors
         ? `background: linear-gradient(135deg, ${item.colors[0]}, ${item.colors[1] || item.colors[0]})`
-        : `background: rgba(255,255,255,0.9)`;
+        : `background: rgba(255,255,255,0.92)`;
 
       card.innerHTML = `
         <div class="swatch" style="${bgStyle}">${item.icon || ""}</div>
@@ -131,7 +139,7 @@
         <div class="item-price">${isEquipped ? "Надето ✓" : isOwned ? "Куплено" : `💧 ${item.price}`}</div>
       `;
 
-      // Клик только примеряет предмет!
+      // Клик всегда сначала примеряет предмет (даже если он не куплен!)
       card.addEventListener("click", () => {
         window.AeroAudio.click();
         selectedItem = item;
@@ -155,12 +163,12 @@
     const isOwned = unlocked.includes(item.id);
     const isEquipped = user.customization[field] === item.id;
 
-    // Показываем бейдж «Примерка», если на превью есть некупленный предмет
-    const hasUnownedPreview = Object.keys(TAB_MAP).some(tab => {
+    // Если на превью есть что-то отличное от надетого — показываем бейдж «Примерка» и кнопку «Сбросить»
+    const isDiffFromEquipped = Object.keys(TAB_MAP).some(tab => {
       const f = TAB_MAP[tab].field;
-      return !user.unlocked[tab].includes(previewCustom[f]);
+      return previewCustom[f] !== user.customization[f];
     });
-    document.getElementById("previewBadge").classList.toggle("hidden", !hasUnownedPreview);
+    document.getElementById("previewControls").classList.toggle("hidden", !isDiffFromEquipped);
 
     document.getElementById("selectedItemName").textContent = item.name;
     const statusEl = document.getElementById("selectedItemStatus");
@@ -170,7 +178,7 @@
     btn.disabled = false;
 
     if (isEquipped) {
-      statusEl.textContent = "Сейчас надето на червячке";
+      statusEl.textContent = "Сейчас надето на питомце";
       btn.textContent = "Надето ✓";
       btn.classList.add("primary-btn");
       btn.disabled = true;
@@ -179,17 +187,16 @@
       btn.textContent = "Надеть";
       btn.classList.add("primary-btn");
     } else if (user.coins >= item.price) {
-      statusEl.textContent = `Цена: 💧 ${item.price}`;
+      statusEl.textContent = `Примерка • Цена: 💧 ${item.price}`;
       btn.textContent = `Купить за 💧 ${item.price}`;
       btn.classList.add("buy-btn");
     } else {
-      statusEl.textContent = `Не хватает ещё 💧 ${item.price - user.coins}`;
+      statusEl.textContent = `Примерка • Не хватает 💧 ${item.price - user.coins}`;
       btn.textContent = `Нужно 💧 ${item.price}`;
       btn.disabled = true;
     }
   }
 
-  // Кнопка покупки / надевания внизу
   document.getElementById("customActionBtn").addEventListener("click", () => {
     const user = window.AeroAuth.getUser();
     const { field } = TAB_MAP[currentCustomTab];
@@ -212,7 +219,6 @@
     renderCustomGrid();
   });
 
-  // Живое 3D-превью
   function startPreviewLoop() {
     stopPreviewLoop();
     const canvas = document.getElementById("previewCanvas");
@@ -231,7 +237,6 @@
     previewRaf = null;
   }
 
-  // Запуск игры (в бой идут только реально купленные и надетые вещи)
   function launchGame() {
     const user = window.AeroAuth.getUser();
     document.getElementById("gameOverModal").classList.add("hidden");
