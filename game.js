@@ -651,4 +651,374 @@
         const pulse = 1 + Math.sin(time * 4 + f.phase) * 0.1;
         const sprite = getFoodOrbSprite(f.color, f.value > 1);
         const drawSize = f.r * 3.8 * pulse;
-        ctx.drawImage(sprite, f.x - drawSize / 2, f.y + bob - drawSize / 2, drawSize, drawSize
+        ctx.drawImage(sprite, f.x - drawSize / 2, f.y + bob - drawSize / 2, drawSize, drawSize);
+      }
+
+      for (const worm of this.worms) {
+        if (worm.alive) this.drawCreature(ctx, worm.segments, worm.angle, worm.radius, worm.custom, worm.boosting, time, viewW, viewH, worm.name);
+      }
+
+      for (const p of this.particles) {
+        ctx.globalAlpha = Math.max(0, p.life * 2);
+        const sprite = getFoodOrbSprite(p.color, false);
+        const s = p.r * 3.5;
+        ctx.drawImage(sprite, p.x - s / 2, p.y - s / 2, s, s);
+      }
+      ctx.globalAlpha = 1;
+
+      ctx.restore();
+    }
+
+    drawGrid(ctx, viewW, viewH) {
+      const step = 100;
+      const startX = Math.floor((this.camera.x - viewW) / step) * step;
+      const endX = this.camera.x + viewW;
+      const startY = Math.floor((this.camera.y - viewH) / step) * step;
+      const endY = this.camera.y + viewH;
+
+      ctx.strokeStyle = "rgba(14, 165, 233, 0.12)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let x = startX; x <= endX; x += step) { ctx.moveTo(x, startY); ctx.lineTo(x, endY); }
+      for (let y = startY; y <= endY; y += step) { ctx.moveTo(startX, y); ctx.lineTo(endX, y); }
+      ctx.stroke();
+    }
+
+    // Единая отрисовка существа (и в игре, и в превью)
+    drawCreature(ctx, segs, headAngle, r, custom, boosting, time, viewW, viewH, labelName) {
+      const skin = CFG.SKINS.find(s => s.id === custom.skin) || CFG.SKINS[0];
+      const aura = CFG.AURAS.find(a => a.id === custom.aura) || CFG.AURAS[0];
+      const bodyType = custom.body || "worm";
+      const pattern = custom.pattern || "gloss";
+      const colors = skin.colors;
+
+      for (let i = segs.length - 1; i >= 0; i--) {
+        const s = segs[i];
+        if (viewW && (Math.abs(s.x - this.camera.x) > viewW || Math.abs(s.y - this.camera.y) > viewH)) continue;
+
+        let segR = i > segs.length - 4 ? r * (0.64 + (segs.length - i) * 0.09) : r;
+        if (bodyType === "caterpillar") segR *= (i % 2 === 0 ? 1.07 : 0.96);
+
+        const colorIdx = pattern === "stripes"
+          ? Math.floor(i / 2) % colors.length
+          : Math.floor(i / 4) % colors.length;
+
+        // Красивая многослойная аура с искрами
+        if (boosting || aura.color) {
+          const auraColor = aura.color === "rainbow"
+            ? `hsl(${(time * 90 + i * 18) % 360}, 90%, 65%)`
+            : (aura.color || colors[0]);
+          const pulse = 1.38 + Math.sin(time * 5 + i * 0.5) * 0.12;
+
+          ctx.save();
+          ctx.globalAlpha = 0.22;
+          ctx.fillStyle = auraColor;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, segR * pulse, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (i % 3 === 0) {
+            ctx.globalAlpha = 0.55;
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, segR * (pulse * 0.92), 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Парящие искорки вокруг ауры
+            const spA = time * 2.5 + i;
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(s.x + Math.cos(spA) * segR * 1.45, s.y + Math.sin(spA) * segR * 1.45, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+
+        // Лапки для многоножки и гусенички
+        if ((bodyType === "centipede" || (bodyType === "caterpillar" && i % 2 === 1)) && i > 0 && i < segs.length - 1) {
+          const prev = segs[i - 1];
+          const segAngle = Math.atan2(prev.y - s.y, prev.x - s.x);
+          const wiggle = Math.sin(time * 14 + i * 1.2) * 0.35;
+          const legLen = bodyType === "centipede" ? segR * 1.55 : segR * 1.22;
+
+          ctx.strokeStyle = colors[colorIdx];
+          ctx.lineWidth = bodyType === "centipede" ? 3.5 : 5;
+          ctx.lineCap = "round";
+          for (const side of [-1, 1]) {
+            const la = segAngle + side * (Math.PI / 2 + wiggle);
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(s.x + Math.cos(la) * legLen, s.y + Math.sin(la) * legLen);
+            ctx.stroke();
+          }
+        }
+
+        // 3D-желейный сегмент
+        const sprite = getJellySegmentSprite(colors[colorIdx], pattern, bodyType);
+        const drawSize = segR * 2.38;
+        ctx.drawImage(sprite, s.x - drawSize / 2, s.y - drawSize / 2, drawSize, drawSize);
+      }
+
+      // Усики для гусенички и антеннка для робота
+      const head = segs[0];
+      if (bodyType === "caterpillar") this.drawAntennae(ctx, head, headAngle, r, colors[0]);
+      if (bodyType === "robot") this.drawRobotAntenna(ctx, head, headAngle, r);
+
+      // Милая мордочка + глазки
+      this.drawEyes(ctx, head, headAngle, r, custom.eyes || "kawaii");
+
+      // Аксессуар на голову
+      if (custom.hat && custom.hat !== "none") {
+        this.drawHat(ctx, head, headAngle, r, custom.hat, time);
+      }
+
+      if (labelName) {
+        ctx.font = "800 13px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(255,255,255,0.88)";
+        ctx.strokeText(labelName, head.x, head.y - r - 14);
+        ctx.fillStyle = "#05334a";
+        ctx.fillText(labelName, head.x, head.y - r - 14);
+      }
+    }
+
+    drawAntennae(ctx, head, angle, r, color) {
+      ctx.save();
+      ctx.translate(head.x, head.y);
+      ctx.rotate(angle);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.6;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(r * 0.5, side * r * 0.35);
+        ctx.quadraticCurveTo(r * 1.1, side * r * 0.7, r * 1.35, side * r * 0.55);
+        ctx.stroke();
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(r * 1.35, side * r * 0.55, 3.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    drawRobotAntenna(ctx, head, angle, r) {
+      ctx.save();
+      ctx.translate(head.x, head.y);
+      ctx.rotate(angle);
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.4, 0);
+      ctx.lineTo(-r * 1.25, 0);
+      ctx.stroke();
+      ctx.fillStyle = "#38bdf8";
+      ctx.beginPath();
+      ctx.arc(-r * 1.3, 0, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    drawHat(ctx, head, angle, r, hat, time) {
+      ctx.save();
+      ctx.translate(head.x, head.y - r * 0.95);
+      const bob = Math.sin(time * 4) * 2;
+      ctx.translate(0, bob);
+
+      if (hat === "crown") {
+        ctx.fillStyle = "#facc15";
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-11, 4); ctx.lineTo(-13, -9); ctx.lineTo(-5, -2);
+        ctx.lineTo(0, -12); ctx.lineTo(5, -2); ctx.lineTo(13, -9); ctx.lineTo(11, 4);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+      } else if (hat === "bow") {
+        ctx.fillStyle = "#f472b6";
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.ellipse(-8, -2, 8, 5, -0.3, 0, Math.PI * 2);
+        ctx.ellipse(8, -2, 8, 5, 0.3, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, -2, 4, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+      } else if (hat === "leaf") {
+        ctx.strokeStyle = "#16a34a";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(0, 4); ctx.quadraticCurveTo(0, -6, 6, -10);
+        ctx.stroke();
+        ctx.fillStyle = "#4ade80";
+        ctx.beginPath();
+        ctx.ellipse(9, -11, 7, 4, -0.4, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (hat === "bubble") {
+        ctx.fillStyle = "rgba(186, 230, 253, 0.55)";
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(0, -7, 10, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(-3, -10, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (hat === "cat_ears") {
+        ctx.fillStyle = "#f9a8d4";
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.8;
+        for (const s of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(s * 4, 4); ctx.lineTo(s * 14, -10); ctx.lineTo(s * 15, 5);
+          ctx.closePath();
+          ctx.fill(); ctx.stroke();
+        }
+      } else if (hat === "halo") {
+        ctx.strokeStyle = "#fef08a";
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.ellipse(0, -10, 14, 5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    drawEyes(ctx, head, angle, r, eyeStyle) {
+      ctx.save();
+      ctx.translate(head.x, head.y);
+      ctx.rotate(angle);
+
+      const ex = r * 0.36;
+      const ey = r * 0.44;
+
+      // Милая крошечная улыбочка
+      if (eyeStyle !== "cool") {
+        ctx.strokeStyle = "rgba(5, 51, 74, 0.65)";
+        ctx.lineWidth = 1.8;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.arc(ex + r * 0.22, 0, r * 0.14, -0.7, 0.7);
+        ctx.stroke();
+      }
+
+      if (eyeStyle === "cool") {
+        ctx.fillStyle = "#0f172a";
+        ctx.beginPath();
+        ctx.roundRect(ex - 5, -ey - 6, 11, (ey + 6) * 2, 5);
+        ctx.fill();
+        const visor = ctx.createLinearGradient(ex - 4, -ey, ex + 5, ey);
+        visor.addColorStop(0, "#7dd3fc");
+        visor.addColorStop(0.5, "#0284c7");
+        visor.addColorStop(1, "#34d399");
+        ctx.fillStyle = visor;
+        ctx.beginPath();
+        ctx.roundRect(ex - 3, -ey - 3, 7, ey - 1, 3);
+        ctx.roundRect(ex - 3, 4, 7, ey - 1, 3);
+        ctx.fill();
+      } else {
+        for (const side of [-1, 1]) {
+          const y = side * ey;
+          // Нежный румянец
+          ctx.fillStyle = "rgba(244, 114, 182, 0.42)";
+          ctx.beginPath();
+          ctx.ellipse(ex - r * 0.14, y + side * r * 0.18, r * 0.17, r * 0.11, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (eyeStyle === "kawaii") {
+            ctx.fillStyle = "#0f172a";
+            ctx.beginPath();
+            ctx.arc(ex, y, r * 0.31, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(ex + r * 0.1, y - r * 0.1, r * 0.12, 0, Math.PI * 2);
+            ctx.arc(ex - r * 0.08, y + r * 0.08, r * 0.06, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (eyeStyle === "aero") {
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(ex, y, r * 0.34, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#0ea5e9";
+            ctx.beginPath();
+            ctx.arc(ex + r * 0.08, y, r * 0.21, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#082f49";
+            ctx.beginPath();
+            ctx.arc(ex + r * 0.1, y, r * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(ex + r * 0.14, y - r * 0.09, r * 0.08, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (eyeStyle === "cat") {
+            ctx.fillStyle = "#fef08a";
+            ctx.strokeStyle = "#05334a";
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.arc(ex, y, r * 0.33, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#0f172a";
+            ctx.beginPath();
+            ctx.ellipse(ex + r * 0.08, y, r * 0.08, r * 0.24, 0, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (eyeStyle === "star") {
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(ex, y, r * 0.34, 0, Math.PI * 2);
+            ctx.fill();
+            this.drawStar(ctx, ex + r * 0.06, y, 5, r * 0.22, r * 0.1, "#0284c7");
+          } else if (eyeStyle === "heart") {
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(ex, y, r * 0.34, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#ec4899";
+            const hs = r * 0.14;
+            ctx.beginPath();
+            ctx.arc(ex + hs * 0.5, y - hs * 0.5, hs, 0, Math.PI * 2);
+            ctx.arc(ex + hs * 0.5, y + hs * 0.5, hs, 0, Math.PI * 2);
+            ctx.lineTo(ex - hs * 1.1, y);
+            ctx.fill();
+          }
+        }
+      }
+      ctx.restore();
+    }
+
+    drawStar(ctx, cx, cy, spikes, outerR, innerR, color) {
+      let rot = (Math.PI / 2) * 3;
+      const step = Math.PI / spikes;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - outerR);
+      for (let i = 0; i < spikes; i++) {
+        ctx.lineTo(cx + Math.cos(rot) * outerR, cy + Math.sin(rot) * outerR);
+        rot += step;
+        ctx.lineTo(cx + Math.cos(rot) * innerR, cy + Math.sin(rot) * innerR);
+        rot += step;
+      }
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+    drawPreviewWorm(ctx, width, height, custom, time) {
+      ctx.clearRect(0, 0, width, height);
+      const segs = [];
+      const count = 16;
+      for (let i = 0; i < count; i++) {
+        segs.push({
+          x: width * 0.78 - i * 14,
+          y: height * 0.56 + Math.sin(time - i * 0.42) * 20
+        });
+      }
+      this.drawCreature(ctx, segs, Math.cos(time) * 0.22, 20, custom, false, time, null, null, null);
+    }
+  }
+
+  window.AeroGame = new AeroGameEngine();
+})();
