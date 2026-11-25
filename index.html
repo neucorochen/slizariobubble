@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Фоновые парящие пузырьки для меню -->
   <div class="aero-bg" id="aeroBg">
     <span class="bubble b1"></span>
     <span class="bubble b2"></span>
@@ -68,15 +67,18 @@
     <main class="lobby-grid">
       <!-- Превью червячка -->
       <div class="glass-panel preview-panel">
-        <h2>Твой червячок</h2>
+        <div class="preview-header">
+          <h2>Твой червячок</h2>
+          <span id="previewBadge" class="preview-badge hidden">Примерка</span>
+        </div>
         <div class="preview-stage">
-          <canvas id="previewCanvas" width="320" height="170"></canvas>
+          <canvas id="previewCanvas" width="360" height="190"></canvas>
         </div>
         <button id="playBtn" class="jelly-btn play-btn">ИГРАТЬ</button>
-        <p class="controls-hint">ПК: мышка + ЛКМ/Пробел для ускорения • Телефон: джойстик + кнопка</p>
+        <p class="controls-hint">ПК: мышка + ЛКМ / Пробел / Shift • Телефон: джойстик + кнопка</p>
       </div>
 
-      <!-- Кастомизация -->
+      <!-- Кастомизация с примеркой -->
       <div class="glass-panel custom-panel">
         <div class="custom-tabs">
           <button class="jelly-btn ctab active" data-ctab="skins">Скины</button>
@@ -84,7 +86,17 @@
           <button class="jelly-btn ctab" data-ctab="patterns">Узор</button>
           <button class="jelly-btn ctab" data-ctab="auras">Аура</button>
         </div>
+
         <div id="customGrid" class="custom-grid"></div>
+
+        <!-- Нижняя панель покупки / применения -->
+        <div class="custom-footer">
+          <div class="selected-info">
+            <strong id="selectedItemName">Аква Гель</strong>
+            <span id="selectedItemStatus">В коллекции</span>
+          </div>
+          <button id="customActionBtn" class="jelly-btn primary-btn">Надето ✓</button>
+        </div>
       </div>
     </main>
   </section>
@@ -93,9 +105,8 @@
   <section id="gameScreen" class="screen">
     <canvas id="gameCanvas"></canvas>
 
-    <!-- HUD -->
     <div class="hud-top-left glass-chip">
-      <div>Длина: <strong id="hudScore">10</strong></div>
+      <div>Длина: <strong id="hudScore">14</strong></div>
       <div>Капли: <strong id="hudCoins">+0</strong></div>
     </div>
 
@@ -106,7 +117,7 @@
 
     <button id="exitGameBtn" class="jelly-btn icon-btn hud-exit" title="В меню">✕</button>
 
-    <!-- Мобильное управление -->
+    <!-- Мобильное управление (скрыто на ПК) -->
     <div id="mobileControls" class="mobile-controls">
       <div id="joystickZone" class="joystick-zone">
         <div id="joystickBase" class="joystick-base">
