@@ -45,20 +45,28 @@
     });
   });
 
-  document.getElementById("authForm").addEventListener("submit", (e) => {
+  document.getElementById("authForm").addEventListener("submit", async (e) => {
     e.preventDefault();
+    const btn = document.getElementById("authSubmitBtn");
+    const errEl = document.getElementById("authError");
     const u = document.getElementById("authUsername").value;
     const p = document.getElementById("authPassword").value;
     const c = document.getElementById("authConfirm").value;
 
+    btn.disabled = true;
+    errEl.textContent = "Подключение...";
+
     const res = authMode === "login"
-      ? window.AeroAuth.login(u, p)
-      : window.AeroAuth.register(u, p, c);
+      ? await window.AeroAuth.login(u, p)
+      : await window.AeroAuth.register(u, p, c);
+
+    btn.disabled = false;
 
     if (!res.ok) {
-      document.getElementById("authError").textContent = res.error;
+      errEl.textContent = res.error;
       return;
     }
+    errEl.textContent = "";
     playSfx("buy");
     openLobby();
   });
@@ -82,7 +90,6 @@
     e.currentTarget.textContent = muted ? "🔇" : "🔊";
   });
 
-  // Выбор своих 3 цветов
   ["cc1", "cc2", "cc3"].forEach((id, idx) => {
     const input = document.getElementById(id);
     if (!input) return;
@@ -167,7 +174,7 @@
       card.innerHTML = `
         <div class="swatch" style="${bgStyle}">${item.icon || ""}</div>
         <div class="item-name">${item.name}</div>
-        <div class="item-price">${isEquipped ? "Надето ✓" : isOwned ? "Куплено" : `💧 ${item.price}`}</div>
+        <div class="item-price">${isEquipped ? "Надето ✓" : isOwned ? "Куплено" : `💧 \${item.price}`}</div>
       `;
 
       card.addEventListener("click", () => {
@@ -193,7 +200,6 @@
     const isOwned = unlocked.includes(item.id);
     const isEquipped = user.customization[field] === item.id;
 
-    // Показываем выбор 3 цветов, если выбрана карточка «Свой цвет»
     const colorBar = document.getElementById("customColorBar");
     if (colorBar) {
       colorBar.classList.toggle("hidden", !(currentCustomTab === "skins" && item.isCustom));
@@ -298,7 +304,9 @@
     openLobby();
   });
 
-  const existingUser = window.AeroAuth.init();
-  if (existingUser) openLobby();
-  else showScreen(authScreen);
+  (async () => {
+    const existingUser = await window.AeroAuth.init();
+    if (existingUser) openLobby();
+    else showScreen(authScreen);
+  })();
 })();
