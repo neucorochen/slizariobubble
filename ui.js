@@ -7,7 +7,16 @@
 
   let authMode = "login";
   let currentCustomTab = "skins";
+  let previewCustom = null; // Временная примерка
+  let selectedItem = null;  // Выбранная карточка для нижней кнопки
   let previewRaf = null;
+
+  const TAB_MAP = {
+    skins:    { list: CFG.SKINS,    field: "skin" },
+    eyes:     { list: CFG.EYES,     field: "eyes" },
+    patterns: { list: CFG.PATTERNS, field: "pattern" },
+    auras:    { list: CFG.AURAS,    field: "aura" }
+  };
 
   function showScreen(target) {
     [authScreen, lobbyScreen, gameScreen].forEach(s => s.classList.remove("active"));
@@ -18,7 +27,7 @@
     else stopPreviewLoop();
   }
 
-  // Переключение Вход / Регистрация
+  // Авторизация
   document.querySelectorAll("[data-auth-tab]").forEach(btn => {
     btn.addEventListener("click", () => {
       window.AeroAudio.click();
@@ -71,19 +80,28 @@
     const user = window.AeroAuth.getUser();
     if (!user) return showScreen(authScreen);
 
+    previewCustom = { ...user.customization };
     document.getElementById("lobbyUsername").textContent = user.username;
     document.getElementById("lobbyBest").textContent = user.bestScore;
     document.getElementById("lobbyCoins").textContent = user.coins;
+    selectCurrentTabDefault();
     renderCustomGrid();
     showScreen(lobbyScreen);
   }
 
-  // Вкладки кастомизации
+  function selectCurrentTabDefault() {
+    const user = window.AeroAuth.getUser();
+    const { list, field } = TAB_MAP[currentCustomTab];
+    selectedItem = list.find(i => i.id === previewCustom[field]) || list[0];
+  }
+
+  // Переключение вкладок кастомизации
   document.querySelectorAll("[data-ctab]").forEach(btn => {
     btn.addEventListener("click", () => {
       window.AeroAudio.click();
       currentCustomTab = btn.dataset.ctab;
       document.querySelectorAll("[data-ctab]").forEach(b => b.classList.toggle("active", b === btn));
+      selectCurrentTabDefault();
       renderCustomGrid();
     });
   });
@@ -91,114 +109,120 @@
   function renderCustomGrid() {
     const user = window.AeroAuth.getUser();
     const grid = document.getElementById("customGrid");
-    const map = {
-      skins:    { list: CFG.SKINS,    field: "skin" },
-      eyes:     { list: CFG.EYES,     field: "eyes" },
-      patterns: { list: CFG.PATTERNS, field: "pattern" },
-      auras:    { list: CFG.AURAS,    field: "aura" }
-    };
-
-    const { list, field } = map[currentCustomTab];
+    const { list, field } = TAB_MAP[currentCustomTab];
     const unlocked = user.unlocked[currentCustomTab];
 
     grid.innerHTML = "";
     list.forEach(item => {
       const isOwned = unlocked.includes(item.id);
-      const isSelected = user.customization[field] === item.id;
+      const isEquipped = user.customization[field] === item.id;
+      const isPreviewing = selectedItem && selectedItem.id === item.id;
 
       const card = document.createElement("div");
-      card.className = `item-card ${isSelected ? "selected" : ""}`;
+      card.className = `item-card ${isEquipped ? "equipped" : ""} ${isPreviewing && !isEquipped ? "previewing" : ""}`;
 
       const bgStyle = item.colors
         ? `background: linear-gradient(135deg, ${item.colors[0]}, ${item.colors[1] || item.colors[0]})`
-        : `background: rgba(255,255,255,0.85)`;
+        : `background: rgba(255,255,255,0.9)`;
 
       card.innerHTML = `
         <div class="swatch" style="${bgStyle}">${item.icon || ""}</div>
         <div class="item-name">${item.name}</div>
-        <div class="item-price">${isSelected ? "Выбрано" : isOwned ? "Надеть" : `💧 ${item.price}`}</div>
+        <div class="item-price">${isEquipped ? "Надето ✓" : isOwned ? "Куплено" : `💧 ${item.price}`}</div>
       `;
 
+      // Клик только примеряет предмет!
       card.addEventListener("click", () => {
-        if (isOwned) {
-          user.customization[field] = item.id;
-          window.AeroAuth.saveProfile();
-          window.AeroAudio.click();
-          renderCustomGrid();
-        } else if (user.coins >= item.price) {
-          user.coins -= item.price;
-          unlocked.push(item.id);
-          user.customization[field] = item.id;
-          window.AeroAuth.saveProfile();
-          window.AeroAudio.buy();
-          document.getElementById("lobbyCoins").textContent = user.coins;
-          renderCustomGrid();
-        } else {
-          card.style.transform = "scale(0.92)";
-          setTimeout(() => card.style.transform = "", 150);
-        }
+        window.AeroAudio.click();
+        selectedItem = item;
+        previewCustom[field] = item.id;
+        renderCustomGrid();
       });
 
       grid.appendChild(card);
     });
+
+    updateActionFooter();
   }
 
-  // Живое анимированное превью червячка в лобби
+  function updateActionFooter() {
+    const user = window.AeroAuth.getUser();
+    const { field } = TAB_MAP[currentCustomTab];
+    const unlocked = user.unlocked[currentCustomTab];
+    const item = selectedItem;
+    if (!item) return;
+
+    const isOwned = unlocked.includes(item.id);
+    const isEquipped = user.customization[field] === item.id;
+
+    // Показываем бейдж «Примерка», если на превью есть некупленный предмет
+    const hasUnownedPreview = Object.keys(TAB_MAP).some(tab => {
+      const f = TAB_MAP[tab].field;
+      return !user.unlocked[tab].includes(previewCustom[f]);
+    });
+    document.getElementById("previewBadge").classList.toggle("hidden", !hasUnownedPreview);
+
+    document.getElementById("selectedItemName").textContent = item.name;
+    const statusEl = document.getElementById("selectedItemStatus");
+    const btn = document.getElementById("customActionBtn");
+
+    btn.className = "jelly-btn";
+    btn.disabled = false;
+
+    if (isEquipped) {
+      statusEl.textContent = "Сейчас надето на червячке";
+      btn.textContent = "Надето ✓";
+      btn.classList.add("primary-btn");
+      btn.disabled = true;
+    } else if (isOwned) {
+      statusEl.textContent = "Есть в твоей коллекции";
+      btn.textContent = "Надеть";
+      btn.classList.add("primary-btn");
+    } else if (user.coins >= item.price) {
+      statusEl.textContent = `Цена: 💧 ${item.price}`;
+      btn.textContent = `Купить за 💧 ${item.price}`;
+      btn.classList.add("buy-btn");
+    } else {
+      statusEl.textContent = `Не хватает ещё 💧 ${item.price - user.coins}`;
+      btn.textContent = `Нужно 💧 ${item.price}`;
+      btn.disabled = true;
+    }
+  }
+
+  // Кнопка покупки / надевания внизу
+  document.getElementById("customActionBtn").addEventListener("click", () => {
+    const user = window.AeroAuth.getUser();
+    const { field } = TAB_MAP[currentCustomTab];
+    const unlocked = user.unlocked[currentCustomTab];
+    const item = selectedItem;
+    if (!item) return;
+
+    if (unlocked.includes(item.id)) {
+      user.customization[field] = item.id;
+      window.AeroAuth.saveProfile();
+      window.AeroAudio.click();
+    } else if (user.coins >= item.price) {
+      user.coins -= item.price;
+      unlocked.push(item.id);
+      user.customization[field] = item.id;
+      window.AeroAuth.saveProfile();
+      window.AeroAudio.buy();
+      document.getElementById("lobbyCoins").textContent = user.coins;
+    }
+    renderCustomGrid();
+  });
+
+  // Живое 3D-превью
   function startPreviewLoop() {
     stopPreviewLoop();
     const canvas = document.getElementById("previewCanvas");
     const ctx = canvas.getContext("2d");
 
     function draw(now) {
-      const user = window.AeroAuth.getUser();
-      if (!user) return;
-      const t = now * 0.003;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const skin = CFG.SKINS.find(s => s.id === user.customization.skin) || CFG.SKINS[0];
-      const aura = CFG.AURAS.find(a => a.id === user.customization.aura) || CFG.AURAS[0];
-      const pattern = user.customization.pattern;
-
-      const count = 16;
-      for (let i = count - 1; i >= 0; i--) {
-        const x = 250 - i * 13;
-        const y = 85 + Math.sin(t - i * 0.45) * 20;
-        const r = i > count - 4 ? 14 : 18;
-        const cIdx = pattern === "stripes" ? Math.floor(i / 2) % skin.colors.length : Math.floor(i / 4) % skin.colors.length;
-
-        if (aura.color) {
-          ctx.fillStyle = aura.color + "38";
-          ctx.beginPath();
-          ctx.arc(x, y, r * 1.4, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        ctx.fillStyle = skin.colors[cIdx];
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-
-        if (pattern === "bubbles" && i % 3 === 0) {
-          ctx.strokeStyle = "rgba(255,255,255,0.75)";
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(x + 4, y + 3, 4.5, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-
-        ctx.fillStyle = "rgba(255,255,255,0.58)";
-        ctx.beginPath();
-        ctx.ellipse(x - 4, y - 6, 8, 4, -0.4, 0, Math.PI * 2);
-        ctx.fill();
-
-        if (i === 0) {
-          window.AeroGame.drawEyes(ctx, { x, y }, Math.cos(t) * 0.25, r, user.customization.eyes);
-        }
-      }
-
+      if (!previewCustom) return;
+      window.AeroGame.drawPreviewWorm(ctx, canvas.width, canvas.height, previewCustom, now * 0.003);
       previewRaf = requestAnimationFrame(draw);
     }
-
     previewRaf = requestAnimationFrame(draw);
   }
 
@@ -207,7 +231,7 @@
     previewRaf = null;
   }
 
-  // Запуск и окончание игры
+  // Запуск игры (в бой идут только реально купленные и надетые вещи)
   function launchGame() {
     const user = window.AeroAuth.getUser();
     document.getElementById("gameOverModal").classList.add("hidden");
@@ -221,28 +245,15 @@
     });
   }
 
-  document.getElementById("playBtn").addEventListener("click", () => {
-    window.AeroAudio.click();
-    launchGame();
-  });
-
-  document.getElementById("restartBtn").addEventListener("click", () => {
-    window.AeroAudio.click();
-    launchGame();
-  });
-
-  document.getElementById("backLobbyBtn").addEventListener("click", () => {
-    window.AeroAudio.click();
-    openLobby();
-  });
-
+  document.getElementById("playBtn").addEventListener("click", () => { window.AeroAudio.click(); launchGame(); });
+  document.getElementById("restartBtn").addEventListener("click", () => { window.AeroAudio.click(); launchGame(); });
+  document.getElementById("backLobbyBtn").addEventListener("click", () => { window.AeroAudio.click(); openLobby(); });
   document.getElementById("exitGameBtn").addEventListener("click", () => {
     window.AeroAudio.click();
     window.AeroGame.stop();
     openLobby();
   });
 
-  // Старт приложения
   const existingUser = window.AeroAuth.init();
   if (existingUser) openLobby();
   else showScreen(authScreen);
