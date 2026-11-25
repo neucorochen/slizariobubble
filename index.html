@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AeroWorm — Frutiger Aero</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Фоновые парящие пузырьки для меню -->
+  <div class="aero-bg" id="aeroBg">
+    <span class="bubble b1"></span>
+    <span class="bubble b2"></span>
+    <span class="bubble b3"></span>
+    <span class="bubble b4"></span>
+    <span class="bubble b5"></span>
+  </div>
+
+  <!-- ЭКРАН АВТОРИЗАЦИИ -->
+  <section id="authScreen" class="screen active">
+    <div class="glass-panel auth-card">
+      <div class="logo-wrap">
+        <div class="logo-orb"></div>
+        <h1>Aero<span>Worm</span></h1>
+        <p class="subtitle">Желейная арена Frutiger Aero</p>
+      </div>
+
+      <div class="tab-switch">
+        <button class="jelly-btn tab-btn active" data-auth-tab="login">Вход</button>
+        <button class="jelly-btn tab-btn" data-auth-tab="register">Регистрация</button>
+      </div>
+
+      <form id="authForm" autocomplete="off">
+        <div class="input-group">
+          <input type="text" id="authUsername" placeholder="Никнейм (3–16 символов)" maxlength="16" required>
+        </div>
+        <div class="input-group">
+          <input type="password" id="authPassword" placeholder="Пароль (от 4 символов)" maxlength="32" required>
+        </div>
+        <div class="input-group hidden" id="confirmPassGroup">
+          <input type="password" id="authConfirm" placeholder="Повтори пароль" maxlength="32">
+        </div>
+        <p id="authError" class="error-msg"></p>
+        <button type="submit" id="authSubmitBtn" class="jelly-btn primary-btn full-width">Войти в аккаунт</button>
+      </form>
+
+      <button id="guestBtn" class="link-btn">Играть как гость (без сохранения)</button>
+    </div>
+  </section>
+
+  <!-- ГЛАВНОЕ ЛОББИ И КАСТОМИЗАЦИЯ -->
+  <section id="lobbyScreen" class="screen">
+    <header class="glass-bar top-bar">
+      <div class="user-badge">
+        <div class="avatar-dot"></div>
+        <div>
+          <strong id="lobbyUsername">Игрок</strong>
+          <small>Рекорд: <span id="lobbyBest">0</span></small>
+        </div>
+      </div>
+      <div class="top-actions">
+        <div class="coin-pill">💧 <span id="lobbyCoins">0</span></div>
+        <button id="soundToggleBtn" class="jelly-btn icon-btn" title="Звук">🔊</button>
+        <button id="logoutBtn" class="jelly-btn danger-btn small-btn">Выйти</button>
+      </div>
+    </header>
+
+    <main class="lobby-grid">
+      <!-- Превью червячка -->
+      <div class="glass-panel preview-panel">
+        <h2>Твой червячок</h2>
+        <div class="preview-stage">
+          <canvas id="previewCanvas" width="320" height="170"></canvas>
+        </div>
+        <button id="playBtn" class="jelly-btn play-btn">ИГРАТЬ</button>
+        <p class="controls-hint">ПК: мышка + ЛКМ/Пробел для ускорения • Телефон: джойстик + кнопка</p>
+      </div>
+
+      <!-- Кастомизация -->
+      <div class="glass-panel custom-panel">
+        <div class="custom-tabs">
+          <button class="jelly-btn ctab active" data-ctab="skins">Скины</button>
+          <button class="jelly-btn ctab" data-ctab="eyes">Глазки</button>
+          <button class="jelly-btn ctab" data-ctab="patterns">Узор</button>
+          <button class="jelly-btn ctab" data-ctab="auras">Аура</button>
+        </div>
+        <div id="customGrid" class="custom-grid"></div>
+      </div>
+    </main>
+  </section>
+
+  <!-- ИГРОВОЙ ЭКРАН -->
+  <section id="gameScreen" class="screen">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD -->
+    <div class="hud-top-left glass-chip">
+      <div>Длина: <strong id="hudScore">10</strong></div>
+      <div>Капли: <strong id="hudCoins">+0</strong></div>
+    </div>
+
+    <div class="hud-leaderboard glass-chip">
+      <div class="lb-title">Топ арены</div>
+      <ol id="leaderboardList"></ol>
+    </div>
+
+    <button id="exitGameBtn" class="jelly-btn icon-btn hud-exit" title="В меню">✕</button>
+
+    <!-- Мобильное управление -->
+    <div id="mobileControls" class="mobile-controls">
+      <div id="joystickZone" class="joystick-zone">
+        <div id="joystickBase" class="joystick-base">
+          <div id="joystickKnob" class="joystick-knob"></div>
+        </div>
+      </div>
+      <button id="mobileBoostBtn" class="jelly-btn boost-btn">⚡</button>
+    </div>
+
+    <!-- Окно окончания игры -->
+    <div id="gameOverModal" class="modal-overlay hidden">
+      <div class="glass-panel gameover-card">
+        <h2>Пузырёк лопнул!</h2>
+        <div class="stats-row">
+          <div class="stat-box">
+            <span>Длина</span>
+            <strong id="finalScore">0</strong>
+          </div>
+          <div class="stat-box">
+            <span>Награда</span>
+            <strong>+<span id="finalCoins">0</span> 💧</strong>
+          </div>
+        </div>
+        <div class="gameover-actions">
+          <button id="restartBtn" class="jelly-btn primary-btn">Ещё раз</button>
+          <button id="backLobbyBtn" class="jelly-btn">В гардероб</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="audio.js"></script>
+  <script src="game.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>
