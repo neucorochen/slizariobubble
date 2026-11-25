@@ -20,10 +20,14 @@
     auras:    { list: CFG.AURAS,    field: "aura" }
   };
 
+  function playSfx(name) {
+    if (window.AeroAudio && window.AeroAudio[name]) window.AeroAudio[name]();
+  }
+
   function showScreen(target) {
-    [authScreen, lobbyScreen, gameScreen].forEach(s => s.classList.remove("active"));
-    target.classList.add("active");
-    aeroBg.style.display = target === gameScreen ? "none" : "block";
+    [authScreen, lobbyScreen, gameScreen].forEach(s => s && s.classList.remove("active"));
+    if (target) target.classList.add("active");
+    if (aeroBg) aeroBg.style.display = target === gameScreen ? "none" : "block";
 
     if (target === lobbyScreen) startPreviewLoop();
     else stopPreviewLoop();
@@ -31,7 +35,7 @@
 
   document.querySelectorAll("[data-auth-tab]").forEach(btn => {
     btn.addEventListener("click", () => {
-      window.AeroAudio.click();
+      playSfx("click");
       authMode = btn.dataset.authTab;
       document.querySelectorAll("[data-auth-tab]").forEach(b => b.classList.toggle("active", b === btn));
       document.getElementById("confirmPassGroup").classList.toggle("hidden", authMode === "login");
@@ -55,33 +59,58 @@
       document.getElementById("authError").textContent = res.error;
       return;
     }
-    window.AeroAudio.buy();
+    playSfx("buy");
     openLobby();
   });
 
   document.getElementById("guestBtn").addEventListener("click", () => {
-    window.AeroAudio.click();
+    playSfx("click");
     window.AeroAuth.loginAsGuest();
     openLobby();
   });
 
   document.getElementById("logoutBtn").addEventListener("click", () => {
-    window.AeroAudio.click();
+    playSfx("click");
     window.AeroAuth.logout();
     document.getElementById("authForm").reset();
     showScreen(authScreen);
   });
 
   document.getElementById("soundToggleBtn").addEventListener("click", (e) => {
+    if (!window.AeroAudio) return;
     const muted = window.AeroAudio.toggleMute();
     e.currentTarget.textContent = muted ? "🔇" : "🔊";
+  });
+
+  // Выбор своих 3 цветов
+  ["cc1", "cc2", "cc3"].forEach((id, idx) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.addEventListener("input", () => {
+      if (!previewCustom) return;
+      previewCustom.customColors[idx] = input.value;
+      const user = window.AeroAuth.getUser();
+      if (user && user.unlocked.skins.includes("custom")) {
+        user.customization.customColors[idx] = input.value;
+        window.AeroAuth.saveProfile();
+      }
+    });
   });
 
   function openLobby() {
     const user = window.AeroAuth.getUser();
     if (!user) return showScreen(authScreen);
 
-    previewCustom = { ...user.customization };
+    previewCustom = {
+      ...user.customization,
+      customColors: [...(user.customization.customColors || ["#38bdf8", "#f472b6", "#4ade80"])]
+    };
+
+    ["cc1", "cc2", "cc3"].forEach((id, idx) => {
+      const el = document.getElementById(id);
+      if (el) el.value = previewCustom.customColors[idx];
+    });
+
     document.getElementById("lobbyUsername").textContent = user.username;
     document.getElementById("lobbyBest").textContent = user.bestScore;
     document.getElementById("lobbyCoins").textContent = user.coins;
@@ -97,7 +126,7 @@
 
   document.querySelectorAll("[data-ctab]").forEach(btn => {
     btn.addEventListener("click", () => {
-      window.AeroAudio.click();
+      playSfx("click");
       currentCustomTab = btn.dataset.ctab;
       document.querySelectorAll("[data-ctab]").forEach(b => b.classList.toggle("active", b === btn));
       selectCurrentTabDefault();
@@ -105,14 +134,16 @@
     });
   });
 
-  // Сброс примерки к реально надетым вещам
-  document.getElementById("resetPreviewBtn").addEventListener("click", () => {
-    const user = window.AeroAuth.getUser();
-    window.AeroAudio.click();
-    previewCustom = { ...user.customization };
-    selectCurrentTabDefault();
-    renderCustomGrid();
-  });
+  const resetBtn = document.getElementById("resetPreviewBtn");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      const user = window.AeroAuth.getUser();
+      playSfx("click");
+      previewCustom = { ...user.customization, customColors: [...user.customization.customColors] };
+      selectCurrentTabDefault();
+      renderCustomGrid();
+    });
+  }
 
   function renderCustomGrid() {
     const user = window.AeroAuth.getUser();
@@ -139,9 +170,8 @@
         <div class="item-price">${isEquipped ? "Надето ✓" : isOwned ? "Куплено" : `💧 ${item.price}`}</div>
       `;
 
-      // Клик всегда сначала примеряет предмет (даже если он не куплен!)
       card.addEventListener("click", () => {
-        window.AeroAudio.click();
+        playSfx("click");
         selectedItem = item;
         previewCustom[field] = item.id;
         renderCustomGrid();
@@ -163,12 +193,18 @@
     const isOwned = unlocked.includes(item.id);
     const isEquipped = user.customization[field] === item.id;
 
-    // Если на превью есть что-то отличное от надетого — показываем бейдж «Примерка» и кнопку «Сбросить»
+    // Показываем выбор 3 цветов, если выбрана карточка «Свой цвет»
+    const colorBar = document.getElementById("customColorBar");
+    if (colorBar) {
+      colorBar.classList.toggle("hidden", !(currentCustomTab === "skins" && item.isCustom));
+    }
+
     const isDiffFromEquipped = Object.keys(TAB_MAP).some(tab => {
       const f = TAB_MAP[tab].field;
       return previewCustom[f] !== user.customization[f];
     });
-    document.getElementById("previewControls").classList.toggle("hidden", !isDiffFromEquipped);
+    const prevCtrl = document.getElementById("previewControls");
+    if (prevCtrl) prevCtrl.classList.toggle("hidden", !isDiffFromEquipped);
 
     document.getElementById("selectedItemName").textContent = item.name;
     const statusEl = document.getElementById("selectedItemStatus");
@@ -206,14 +242,16 @@
 
     if (unlocked.includes(item.id)) {
       user.customization[field] = item.id;
+      if (item.isCustom) user.customization.customColors = [...previewCustom.customColors];
       window.AeroAuth.saveProfile();
-      window.AeroAudio.click();
+      playSfx("click");
     } else if (user.coins >= item.price) {
       user.coins -= item.price;
       unlocked.push(item.id);
       user.customization[field] = item.id;
+      if (item.isCustom) user.customization.customColors = [...previewCustom.customColors];
       window.AeroAuth.saveProfile();
-      window.AeroAudio.buy();
+      playSfx("buy");
       document.getElementById("lobbyCoins").textContent = user.coins;
     }
     renderCustomGrid();
@@ -222,6 +260,7 @@
   function startPreviewLoop() {
     stopPreviewLoop();
     const canvas = document.getElementById("previewCanvas");
+    if (!canvas) return;
     const ctx = canvas.getContext("2d");
 
     function draw(now) {
@@ -250,11 +289,11 @@
     });
   }
 
-  document.getElementById("playBtn").addEventListener("click", () => { window.AeroAudio.click(); launchGame(); });
-  document.getElementById("restartBtn").addEventListener("click", () => { window.AeroAudio.click(); launchGame(); });
-  document.getElementById("backLobbyBtn").addEventListener("click", () => { window.AeroAudio.click(); openLobby(); });
+  document.getElementById("playBtn").addEventListener("click", () => { playSfx("click"); launchGame(); });
+  document.getElementById("restartBtn").addEventListener("click", () => { playSfx("click"); launchGame(); });
+  document.getElementById("backLobbyBtn").addEventListener("click", () => { playSfx("click"); openLobby(); });
   document.getElementById("exitGameBtn").addEventListener("click", () => {
-    window.AeroAudio.click();
+    playSfx("click");
     window.AeroGame.stop();
     openLobby();
   });
