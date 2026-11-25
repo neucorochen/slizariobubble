@@ -1,6 +1,6 @@
 window.AERO_CONFIG = {
   // 1. Вставь Project URL из Supabase (Project Settings -> Data API)
-  SUPABASE_URL: "https://rtxmxzleaxnftprfxcxj.supabase.co/rest/v1/",
+  SUPABASE_URL: "https://rtxmxzleaxnftprfxcxj.supabase.co",
   // 2. Вставь ПОЛНЫЙ верхний ключ (Publishable), скопированный по кнопке
   SUPABASE_KEY: "sb_publishable_6TId99dojm1Ns79eIjXWQg_VkVNw_ВСТАВЬ_ОСТАТОК",
 
