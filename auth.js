@@ -12,37 +12,42 @@
   }
 
   function loadUsers() {
-    try {
-      return JSON.parse(localStorage.getItem(USERS_KEY)) || {};
-    } catch {
-      return {};
-    }
+    try { return JSON.parse(localStorage.getItem(USERS_KEY)) || {}; }
+    catch { return {}; }
   }
 
   function saveUsers(users) {
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
   }
 
+  // Гарантирует, что у старых аккаунтов появятся новые поля (виды и шапки)
+  function normalizeProfile(p) {
+    if (!p.unlocked) p.unlocked = {};
+    p.unlocked.bodies   = p.unlocked.bodies   || ["worm"];
+    p.unlocked.skins    = p.unlocked.skins    || ["aqua", "mint"];
+    p.unlocked.hats     = p.unlocked.hats     || ["none"];
+    p.unlocked.eyes     = p.unlocked.eyes     || ["kawaii"];
+    p.unlocked.patterns = p.unlocked.patterns || ["gloss"];
+    p.unlocked.auras    = p.unlocked.auras    || ["none"];
+
+    if (!p.customization) p.customization = {};
+    p.customization.body    = p.customization.body    || "worm";
+    p.customization.skin    = p.customization.skin    || "aqua";
+    p.customization.hat     = p.customization.hat     || "none";
+    p.customization.eyes    = p.customization.eyes    || "kawaii";
+    p.customization.pattern = p.customization.pattern || "gloss";
+    p.customization.aura    = p.customization.aura    || "none";
+    return p;
+  }
+
   function createDefaultProfile(username, passwordHash, isGuest = false) {
-    return {
+    return normalizeProfile({
       username,
       passwordHash,
       isGuest,
-      coins: isGuest ? 50 : 60,
-      bestScore: 0,
-      unlocked: {
-        skins: ["aqua", "mint"],
-        eyes: ["kawaii"],
-        patterns: ["gloss"],
-        auras: ["none"]
-      },
-      customization: {
-        skin: "aqua",
-        eyes: "kawaii",
-        pattern: "gloss",
-        aura: "none"
-      }
-    };
+      coins: isGuest ? 50 : 75,
+      bestScore: 0
+    });
   }
 
   let currentUser = null;
@@ -53,15 +58,13 @@
       if (savedName) {
         const users = loadUsers();
         if (users[savedName.toLowerCase()]) {
-          currentUser = users[savedName.toLowerCase()];
+          currentUser = normalizeProfile(users[savedName.toLowerCase()]);
         }
       }
       return currentUser;
     },
 
-    getUser() {
-      return currentUser;
-    },
+    getUser() { return currentUser; },
 
     register(username, password, confirm) {
       const clean = username.trim();
@@ -88,7 +91,7 @@
       if (!user) return { ok: false, error: "Аккаунт не найден" };
       if (user.passwordHash !== simpleHash(password)) return { ok: false, error: "Неверный пароль" };
 
-      currentUser = user;
+      currentUser = normalizeProfile(user);
       localStorage.setItem(SESSION_KEY, key);
       return { ok: true, user: currentUser };
     },
